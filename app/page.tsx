@@ -1,14 +1,15 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, Search, ChevronRight, BookOpen, Calendar, Bus, Shirt,
   CreditCard, GraduationCap, UtensilsCrossed, Shield, Ticket,
   MessageCircle, Heart, ArrowRight, CheckCircle2, Lock, Sparkles,
   ChevronLeft, ChevronDown, X, Zap, TrendingUp, Users, BarChart2,
-  Brain, Layers, Server, Globe, ArrowUpRight, Play, Presentation,
+  Brain, Layers, Server, Globe, ArrowUpRight, Play, Presentation, FileText, Upload, Loader,
   AlertTriangle, CheckCheck, DollarSign, Map, Star, Cpu, Database,
-  Fingerprint, Eye, Building2, GraduationCap as GradCap
+  Fingerprint, Eye, Building2, GraduationCap as GradCap,
+  Phone, Navigation, Coffee, VolumeX, AlertOctagon, Wifi, Send
 } from "lucide-react";
 
 const fontStyle = `
@@ -18,10 +19,24 @@ const fontStyle = `
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-thumb { background: rgba(0,40,85,0.2); border-radius: 4px; }
   body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  ::selection { background: #EAAA00; color: #002855; }
+  input::placeholder { color: #64748b; opacity: 1; }
 `;
 
 // ─── Shared Data ──────────────────────────────────────────────────────────────
-const ASSIGNMENTS = [
+interface Assignment {
+  id: number;
+  course: string;
+  color: string;
+  title: string;
+  due: string;
+  daysLeft: number;
+  difficulty: "Hard" | "Medium" | "Easy";
+  grade: number;
+  weight: number;
+  emoji: string;
+}
+const INITIAL_ASSIGNMENTS: Assignment[] = [
   { id: 1, course: "CS 445", color: "#3b6fd4", title: "Distributed Systems Lab", due: "Feb 21", daysLeft: 2, difficulty: "Hard", grade: 78, weight: 20, emoji: "💻" },
   { id: 2, course: "MKTG 301", color: "#e8973a", title: "Brand Strategy Deck", due: "Feb 24", daysLeft: 5, difficulty: "Medium", grade: 88, weight: 15, emoji: "📊" },
   { id: 3, course: "STAT 215", color: "#6b5dd3", title: "Regression Analysis", due: "Feb 26", daysLeft: 7, difficulty: "Medium", grade: 82, weight: 25, emoji: "📈" },
@@ -46,9 +61,15 @@ const QUICK_ACTIONS = [
 ];
 const CAMPUS_STATUS = [
   { label: "PRT", value: "Running", ok: true },
-  { label: "Mountainlair", value: "65% full", ok: true },
+  { label: "Mountainlair", value: "92% full", ok: false },
   { label: "Rec Center", value: "Busy", ok: false },
   { label: "Library", value: "42% full", ok: true },
+];
+const STUDY_ZONES = [
+  { name: "Wise Library (Floor 4)", occupancy: 12, noise: "Silent", status: "Recommended" },
+  { name: "Evansdale Library", occupancy: 94, noise: "Loud", status: "Full" },
+  { name: "Downtown Library", occupancy: 45, noise: "Moderate", status: "Open" },
+  { name: "Law Library", occupancy: 20, noise: "Silent", status: "Open" },
 ];
 const difficultyStyle = {
   Hard: { bg: "#fce8e8", text: "#d43b3b" },
@@ -69,15 +90,83 @@ const SLIDES = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function Card({ children, className = "", style = {} }) {
+interface CardProps {
+  children: React.ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}
+function Card({ children, className = "", style = {} }: CardProps) {
   return (
-    <div className={`rounded-3xl bg-white shadow-sm border border-slate-100 ${className}`} style={style}>
+    <div className={`rounded-3xl bg-white ${className}`} style={{
+      boxShadow: "0 10px 40px -10px rgba(0,0,0,0.05), 0 0 2px rgba(0,0,0,0.05)",
+      border: "1px solid rgba(255,255,255,0.5)",
+      ...style
+    }}>
       {children}
     </div>
   );
 }
 
-function NudgeBanner({ assignment, onDismiss }) {
+function Confetti() {
+  const colors = ["#EAAA00", "#002855", "#3aab6e", "#d43b3b", "#3b6fd4"];
+  return (
+    <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 9999, overflow: "hidden" }}>
+      {[...Array(30)].map((_, i) => (
+        <motion.div
+          key={i}
+          initial={{ x: "50vw", y: "50vh", scale: 0 }}
+          animate={{
+            x: `calc(50vw + ${Math.random() * 800 - 400}px)`,
+            y: `calc(50vh + ${Math.random() * 800 - 400}px)`,
+            opacity: [1, 1, 0],
+            scale: [0, 1, 0.5],
+            rotate: Math.random() * 720
+          }}
+          transition={{ duration: 1.2, ease: "easeOut" }}
+          style={{
+            position: "absolute",
+            width: Math.random() * 8 + 4,
+            height: Math.random() * 8 + 4,
+            backgroundColor: colors[Math.floor(Math.random() * colors.length)],
+            borderRadius: Math.random() > 0.5 ? "50%" : "2px",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScanOverlay() {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.9)", backdropFilter: "blur(10px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+      <div style={{ position: "relative", width: 80, height: 100, background: "#fff", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 32, overflow: "hidden" }}>
+        <FileText size={40} color="#0f172a" />
+        <motion.div
+          animate={{ top: ["-10%", "110%", "-10%"] }}
+          transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
+          style={{ position: "absolute", left: 0, right: 0, height: 4, background: "#EAAA00", boxShadow: "0 0 20px 2px #EAAA00" }}
+        />
+      </div>
+      <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Analyzing Syllabus...</h3>
+      <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>Extracting dates from "HIST_152_Syllabus.pdf"</p>
+    </motion.div>
+  );
+}
+
+function Typewriter({ text, delay = 30 }: { text: string, delay?: number }) {
+  const [currentText, setCurrentText] = useState("");
+  useEffect(() => {
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i < text.length) { setCurrentText(text.slice(0, i + 1)); i++; } else { clearInterval(timer); }
+    }, delay);
+    return () => clearInterval(timer);
+  }, [text, delay]);
+  return <span>{currentText}</span>;
+}
+
+function NudgeBanner({ assignment, onDismiss }: { assignment: Assignment; onDismiss: () => void }) {
   return (
     <motion.div initial={{ y: -80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -80, opacity: 0 }}
       transition={{ type: "spring", stiffness: 280, damping: 24 }}
@@ -99,8 +188,136 @@ function NudgeBanner({ assignment, onDismiss }) {
   );
 }
 
+function SafeModeOverlay({ onClose }: { onClose: () => void }) {
+  const [panicSent, setPanicSent] = useState(false);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#0f172a", display: "flex", flexDirection: "column", padding: 24, color: "#fff" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Shield size={24} style={{ color: "#3aab6e" }} />
+          <span style={{ fontSize: 18, fontWeight: 700 }}>SafeWalk Active</span>
+        </div>
+        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%", width: 36, height: 36, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={20} /></button>
+      </div>
+
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 32 }}>
+        <div style={{ width: 200, height: 200, borderRadius: "50%", border: "4px solid #3aab6e", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+          <motion.div animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 2, repeat: Infinity }} style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#3aab6e", zIndex: -1 }} />
+          <div style={{ textAlign: "center" }}>
+            <Navigation size={48} style={{ color: "#3aab6e", marginBottom: 8 }} />
+            <p style={{ fontSize: 14, fontWeight: 600 }}>Sharing Location</p>
+            <p style={{ fontSize: 12, opacity: 0.6 }}>Live with Campus Police</p>
+          </div>
+        </div>
+        <p style={{ textAlign: "center", opacity: 0.7, maxWidth: 260, fontSize: 14 }}>If you disconnect headphones or stop moving for 3 mins, we will alert dispatch.</p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: "auto" }}>
+        <button onClick={() => setPanicSent(true)} style={{ padding: 18, borderRadius: 16, background: panicSent ? "#fff" : "#d43b3b", color: panicSent ? "#d43b3b" : "#fff", border: "none", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, transition: "all 0.3s" }}>
+          {panicSent ? <><CheckCheck size={20} /> DISPATCH NOTIFIED</> : <><AlertOctagon size={20} /> HOLD TO PANIC</>}
+        </button>
+        <button style={{ padding: 18, borderRadius: 16, background: "#1e293b", color: "#fff", border: "none", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <Phone size={20} /> Call A Friend
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+function ChatbotOverlay({ onClose }: { onClose: () => void }) {
+  const [messages, setMessages] = useState([
+    { role: "ai", text: "Hi Alex! 👋 I'm Nexus AI. I can help with schedules, dining, or campus info. What do you need?" }
+  ]);
+  const [input, setInput] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  const handleSend = () => {
+    if (!input.trim()) return;
+    const userMsg = { role: "user", text: input };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+
+    setTimeout(() => {
+      let response = "I can help with that! As a prototype, I'm best at answering questions about your schedule, dining hall capacity, or PRT status.";
+      const lower = userMsg.text.toLowerCase();
+      if (lower.includes("class") || lower.includes("schedule") || lower.includes("where")) {
+        response = "You have CS 445: Distributed Systems at 2:00 PM in Armstrong Hall (Room 301). It's a 12-minute walk from here.";
+      } else if (lower.includes("food") || lower.includes("hungry") || lower.includes("lunch") || lower.includes("eat")) {
+        response = "Mountainlair is super busy (92% full). 🔴\n\nI recommend The Crossing—it's only 15% full right now! 🟢";
+      } else if (lower.includes("prt") || lower.includes("bus")) {
+        response = "PRT is currently running on schedule. 🚈\n\nHowever, the Beechurst station is experiencing higher than normal traffic.";
+      } else if (lower.includes("grade") || lower.includes("gpa")) {
+        response = "Your current cumulative GPA is 3.61. 🎓\n\nYou need an 88% on your upcoming CS 445 lab to maintain your A in that course.";
+      } else if (lower.includes("hello") || lower.includes("hi")) {
+        response = "Hello! Ready to optimize your day?";
+      }
+
+      setMessages(prev => [...prev, { role: "ai", text: response }]);
+    }, 800);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
+      style={{ position: "fixed", bottom: 100, right: 24, width: 340, height: 500, background: "#fff", borderRadius: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)", zIndex: 60, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ padding: "16px 20px", background: "linear-gradient(135deg, #EAAA00, #f0c030)", display: "flex", alignItems: "center", justifyContent: "space-between", color: "#002855" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><Sparkles size={18} color="#002855" /></div>
+          <div><p style={{ fontSize: 14, fontWeight: 700 }}>Nexus AI</p><p style={{ fontSize: 11, opacity: 0.8, fontWeight: 600 }}>Online</p></div>
+        </div>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#002855", opacity: 0.6 }}><X size={20} /></button>
+      </div>
+      <div ref={scrollRef} style={{ flex: 1, padding: 16, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, background: "#f8f9fc" }}>
+        {messages.map((m, i) => (
+          <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+            <div style={{ padding: "10px 14px", borderRadius: 16, borderBottomRightRadius: m.role === "user" ? 4 : 16, borderBottomLeftRadius: m.role === "ai" ? 4 : 16, background: m.role === "user" ? "#002855" : "#fff", color: m.role === "user" ? "#fff" : "#1e2a3a", fontSize: 13, lineHeight: 1.5, boxShadow: m.role === "ai" ? "0 2px 4px rgba(0,0,0,0.05)" : "none", whiteSpace: "pre-wrap" }}>{m.text}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: 12, background: "#fff", borderTop: "1px solid #eef0f4", display: "flex", gap: 8 }}>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSend()} placeholder="Ask anything..." style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontSize: 13, outline: "none", fontFamily: "inherit" }} />
+        <button onClick={handleSend} style={{ width: 40, height: 40, borderRadius: "50%", background: "#002855", color: "#fff", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><Send size={16} /></button>
+      </div>
+    </motion.div>
+  );
+}
+
+function SmartStack() {
+  const [index, setIndex] = useState(0);
+  const insights = [
+    { id: 1, icon: "⚡", color: "#1a6bc4", bg: "#e6f0ff", title: "PRT Rescue: Transit Alert", text: "PRT is down. To make CS 445 on time, take the Blue Line Bus (arriving in 4m).", sub: "💡 Saves you ~20 mins walking." },
+    { id: 2, icon: "🍔", color: "#d43b3b", bg: "#fce8e8", title: "Lunch Rush Detected", text: "Mountainlair is at 92% capacity. The Crossing is at 15%.", sub: "💡 Switch to avoid the line." },
+    { id: 3, icon: "💳", color: "#2d9e6b", bg: "#e6f7ef", title: "Meal Swipe Budget", text: "You are burning swipes 20% too fast. Projected to run out by Nov 12.", sub: "💡 Recommended: Cook at home tonight." },
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => setIndex(i => (i + 1) % insights.length), 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <Card style={{ padding: "14px 16px", background: "rgba(255,255,255,0.8)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.6)", position: "relative", overflow: "hidden" }}>
+      <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: insights[index].bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{insights[index].icon}</div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: insights[index].color, marginBottom: 4 }}>{insights[index].title}</p>
+          <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{insights[index].text} <span style={{ display: "block", fontSize: 12, color: "#6b7280", marginTop: 4 }}>{insights[index].sub}</span></p>
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 4, marginTop: 12 }}>
+        {insights.map((_, i) => <button key={i} onClick={() => setIndex(i)} style={{ width: 6, height: 6, borderRadius: "50%", background: i === index ? "#002855" : "#d1d5db", border: "none", padding: 0, cursor: "pointer" }} />)}
+      </div>
+    </Card>
+  );
+}
+
 // ─── SLIDE CONTENTS ───────────────────────────────────────────────────────────
-function SlideContent({ slideId, onEnterApp }) {
+function SlideContent({ slideId, onEnterApp }: { slideId: number; onEnterApp: () => void }) {
   const baseText = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
   if (slideId === 0) return (
@@ -126,9 +343,9 @@ function SlideContent({ slideId, onEnterApp }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
       {[
         { icon: "🎯", title: "Proactive Academic Agent", desc: "AI that nudges you 48hrs before hard deadlines — not just a calendar", color: "#3b6fd4" },
-        { icon: "💬", title: "Campus Pulse (Anonymous)", desc: "Geo-fenced social layer with NLP sentiment scoring for leadership", color: "#2d9e6b" },
-        { icon: "📡", title: "IoT Resource Integration", desc: "Live occupancy for study rooms, gym equipment, dining wait times", color: "#e8973a" },
-        { icon: "🔐", title: "Zero-Knowledge Security", desc: "Anonymous posts with cryptographic tokens — FERPA-compliant by design", color: "#6b5dd3" },
+        { icon: "🛡️", title: "Safety & Wellness", desc: "SafeWalk GPS sharing and Meal Plan budgeting to keep students secure.", color: "#d43b3b" },
+        { icon: "⚡", title: "Predictive Logistics", desc: "Real-time PRT rescue routes and dining hall wait times.", color: "#e8973a" },
+        { icon: "", title: "Campus Pulse (Anonymous)", desc: "Geo-fenced social layer with NLP sentiment scoring for leadership", color: "#2d9e6b" },
       ].map((item, i) => (
         <motion.div key={item.title} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
           style={{ display: "flex", gap: 14, padding: 14, borderRadius: 16, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
@@ -158,7 +375,7 @@ function SlideContent({ slideId, onEnterApp }) {
       </motion.div>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, width: "100%" }}>
-        {["Academic Roadmap", "Campus Pulse Feed", "Unified App Grid", "Study Nudges", "Sentiment Engine", "SSO Bridge"].map((f, i) => (
+        {["SafeWalk Shield", "Predictive Logistics", "Meal Budgeting", "Campus Pulse", "Unified App Grid", "Academic Nudges"].map((f, i) => (
           <div key={f} style={{ padding: "8px 10px", borderRadius: 12, background: "rgba(234,170,0,0.1)", border: "1px solid rgba(234,170,0,0.2)", fontSize: 11, fontWeight: 600, color: "#EAAA00", textAlign: "center", ...baseText }}>✓ {f}</div>
         ))}
       </motion.div>
@@ -246,7 +463,7 @@ function SlideContent({ slideId, onEnterApp }) {
         },
         {
           phase: "Phase 2", name: "The Sentiment Engine", time: "Months 7–12", color: "#EAAA00",
-          items: ["Launch anonymous Campus Pulse feed", "NLP pipeline + leadership dashboard", "ZKP anonymous token system", "Real-time area sentiment scoring"]
+          items: ["Launch anonymous Campus Pulse feed", "SafeWalk GPS integration", "Meal Plan Budgeting module", "Real-time area sentiment scoring"]
         },
         {
           phase: "Phase 3", name: "The Academic Agent", time: "Months 13–18", color: "#2d9e6b",
@@ -402,13 +619,20 @@ function PresentationComponent({ onClose, onEnterApp }: { onClose: () => void, o
 }
 
 // ─── APP DEMO ─────────────────────────────────────────────────────────────────
-function AppDemo({ onBackToLanding }) {
+function AppDemo({ onBackToLanding }: { onBackToLanding: () => void }) {
+  const [assignments, setAssignments] = useState(INITIAL_ASSIGNMENTS);
+  const [isScanning, setIsScanning] = useState(false);
   const [tab, setTab] = useState("home");
-  const [nudge, setNudge] = useState(null);
+  const [nudge, setNudge] = useState<Assignment | null>(null);
+  const [safeMode, setSafeMode] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [pulseView, setPulseView] = useState("sentiment"); // sentiment | study
   const [likedPosts, setLikedPosts] = useState({});
+  const [toast, setToast] = useState<string | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setNudge(ASSIGNMENTS[0]), 2500);
+    const t = setTimeout(() => setNudge(INITIAL_ASSIGNMENTS[0]), 2500);
     return () => clearTimeout(t);
   }, []);
 
@@ -417,6 +641,29 @@ function AppDemo({ onBackToLanding }) {
     if (h < 12) return "Good morning";
     if (h < 17) return "Good afternoon";
     return "Good evening";
+  };
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const triggerConfetti = () => {
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 2000);
+  };
+
+  const handleScanSyllabus = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      setIsScanning(false);
+      setAssignments(prev => [
+        { id: 99, course: "HIST 152", color: "#d43b6f", title: "Civil War Research Paper", due: "Mar 10", daysLeft: 19, difficulty: "Hard", grade: 0, weight: 25, emoji: "📜" },
+        ...prev
+      ]);
+      triggerConfetti();
+      showToast("Syllabus processed: 12 deadlines added");
+    }, 2500);
   };
 
   const tabs = [
@@ -428,12 +675,24 @@ function AppDemo({ onBackToLanding }) {
 
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", background: "#f4f6fa", minHeight: "100vh" }}>
+      <AnimatePresence>{isScanning && <ScanOverlay />}</AnimatePresence>
+      <AnimatePresence>{safeMode && <SafeModeOverlay onClose={() => setSafeMode(false)} />}</AnimatePresence>
+      <AnimatePresence>{showChat && <ChatbotOverlay onClose={() => setShowChat(false)} />}</AnimatePresence>
+      {showConfetti && <Confetti />}
       <AnimatePresence>
         {nudge && <NudgeBanner assignment={nudge} onDismiss={() => setNudge(null)} />}
       </AnimatePresence>
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            style={{ position: "fixed", bottom: 100, left: "50%", transform: "translateX(-50%)", background: "#1e293b", color: "#fff", padding: "12px 24px", borderRadius: 30, fontSize: 13, fontWeight: 600, boxShadow: "0 10px 30px rgba(0,0,0,0.2)", zIndex: 10000, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle2 size={16} style={{ color: "#3aab6e" }} /> {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Nav */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #eef0f4", position: "sticky", top: 0, zIndex: 40 }}>
+      <div style={{ background: "rgba(255,255,255,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(0,0,0,0.05)", position: "sticky", top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: 680, margin: "0 auto", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={onBackToLanding} style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", padding: 0, marginRight: 4 }}>
             <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg, #002855, #1a4a8a)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 14 }}>N</div>
@@ -460,6 +719,18 @@ function AppDemo({ onBackToLanding }) {
         </div>
       </div>
 
+      {/* SafeWalk FAB */}
+      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} animate={{ boxShadow: ["0 0 0 0px rgba(0,40,85,0.3)", "0 0 0 10px rgba(0,40,85,0)"] }} transition={{ duration: 2, repeat: Infinity }} onClick={() => setSafeMode(true)}
+        style={{ position: "fixed", bottom: 24, right: 24, width: 56, height: 56, borderRadius: 20, background: "#002855", color: "#fff", border: "none", boxShadow: "0 8px 20px rgba(0,40,85,0.3)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <Shield size={24} />
+      </motion.button>
+
+      {/* Chatbot FAB */}
+      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setShowChat(!showChat)}
+        style={{ position: "fixed", bottom: 96, right: 24, width: 56, height: 56, borderRadius: 20, background: "#EAAA00", color: "#002855", border: "none", boxShadow: "0 8px 20px rgba(234,170,0,0.4)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <Sparkles size={24} />
+      </motion.button>
+
       <div style={{ maxWidth: 680, margin: "0 auto", padding: "20px 16px 40px" }}>
         <AnimatePresence mode="wait">
 
@@ -467,7 +738,8 @@ function AppDemo({ onBackToLanding }) {
           {tab === "home" && (
             <motion.div key="home" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <Card style={{ overflow: "hidden" }}>
-                <div style={{ padding: "20px 20px 16px", background: "linear-gradient(135deg, #002855 0%, #1a4a8a 70%, #2a5faa 100%)" }}>
+                <div style={{ padding: "24px 24px 20px", background: "linear-gradient(120deg, #002855 0%, #003da5 100%)", position: "relative" }}>
+                  <div style={{ position: "absolute", top: -20, right: -20, width: 100, height: 100, background: "rgba(255,255,255,0.1)", borderRadius: "50%", filter: "blur(20px)" }} />
                   <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{greeting()},</p>
                   <h1 style={{ fontFamily: "'Fraunces', serif", color: "#fff", fontSize: 30, fontWeight: 700, lineHeight: 1.2, marginBottom: 14 }}>Alex 👋</h1>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -487,14 +759,19 @@ function AppDemo({ onBackToLanding }) {
                 </div>
               </Card>
 
-              <Card style={{ padding: 16, border: "2px solid #fef3e7" }}>
+              {/* Smart Stack (PRT Rescue, Meal Budget, Lunch Rush) */}
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                <SmartStack />
+              </motion.div>
+
+              <Card style={{ padding: 16, border: "1px solid #fef3e7", background: "linear-gradient(to bottom, #fff, #fffaf5)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <span style={{ fontSize: 16 }}>⚡</span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#002855" }}>Coming Up</span>
                   <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 600, padding: "2px 10px", borderRadius: 10, background: "#fef3e7", color: "#c47a1a" }}>4 assignments</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {ASSIGNMENTS.slice(0, 3).map((a, i) => (
+                  {assignments.slice(0, 3).map((a, i) => (
                     <motion.div key={a.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }} style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <div style={{ width: 36, height: 36, borderRadius: 14, background: "#f4f6fa", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{a.emoji}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -516,7 +793,7 @@ function AppDemo({ onBackToLanding }) {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                   {QUICK_ACTIONS.slice(0, 6).map((app, i) => (
                     <motion.button key={app.label} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                      style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", padding: 12, borderRadius: 20, background: "#fff", border: "1px solid #eef0f4", cursor: "pointer", fontFamily: "inherit" }}>
+                      style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", padding: 12, borderRadius: 20, background: "#fff", border: "1px solid #f0f2f5", boxShadow: "0 2px 8px rgba(0,0,0,0.03)", cursor: "pointer", fontFamily: "inherit" }}>
                       <div style={{ width: 36, height: 36, borderRadius: 12, background: app.bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
                         <app.icon size={17} style={{ color: app.color }} />
                       </div>
@@ -584,9 +861,12 @@ function AppDemo({ onBackToLanding }) {
                     <h2 style={{ fontSize: 15, fontWeight: 700, color: "#002855" }}>Your Roadmap</h2>
                     <p style={{ fontSize: 12, color: "#9ba3b5" }}>AI-ranked by difficulty & impact</p>
                   </div>
+                  <button onClick={handleScanSyllabus} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 12, background: "#002855", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    <Upload size={14} /> Scan Syllabus
+                  </button>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {ASSIGNMENTS.map((a, i) => (
+                  {assignments.map((a, i) => (
                     <motion.div key={a.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
                       style={{ padding: 16, borderRadius: 20, background: "#f8f9fc", border: "1px solid #eef0f4", cursor: "pointer" }}>
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -624,9 +904,11 @@ function AppDemo({ onBackToLanding }) {
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 16, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🤖</div>
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: "#EAAA00", marginBottom: 6 }}>Nexus AI Recommends</p>
-                    <p style={{ fontSize: 14, color: "rgba(255,255,255,0.9)", lineHeight: 1.6 }}>Your CS 445 lab is due in <strong style={{ color: "#EAAA00" }}>2 days</strong> and rated Hard. Based on your 78% grade, dedicate <strong style={{ color: "#EAAA00" }}>3–4 hours tonight</strong> to stay ahead.</p>
-                    <button style={{ marginTop: 12, padding: "8px 18px", borderRadius: 14, border: "none", cursor: "pointer", background: "#EAAA00", color: "#002855", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }}>Create Study Plan ✨</button>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#EAAA00", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}><Sparkles size={14} /> Nexus AI Recommends</p>
+                    <p style={{ fontSize: 14, color: "rgba(255,255,255,0.9)", lineHeight: 1.6, minHeight: 44 }}>
+                      <Typewriter text="Your CS 445 lab is due in 2 days and rated Hard. Based on your 78% grade, dedicate 3–4 hours tonight to stay ahead." />
+                    </p>
+                    <button onClick={() => { triggerConfetti(); showToast("Study plan generated & added to calendar!"); }} style={{ marginTop: 12, padding: "8px 18px", borderRadius: 14, border: "none", cursor: "pointer", background: "#EAAA00", color: "#002855", fontSize: 13, fontWeight: 700, fontFamily: "inherit" }}>Create Study Plan ✨</button>
                   </div>
                 </div>
               </div>
@@ -640,17 +922,35 @@ function AppDemo({ onBackToLanding }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                   <span style={{ fontSize: 16 }}>📊</span>
                   <h2 style={{ fontSize: 15, fontWeight: 700, color: "#002855" }}>Campus Mood Today</h2>
+                  <div style={{ marginLeft: "auto", display: "flex", background: "#eef0f4", borderRadius: 10, padding: 2 }}>
+                    {["sentiment", "study"].map(v => (
+                      <button key={v} onClick={() => setPulseView(v)} style={{ padding: "4px 10px", borderRadius: 8, border: "none", background: pulseView === v ? "#fff" : "transparent", color: pulseView === v ? "#002855" : "#9ba3b5", fontSize: 11, fontWeight: 700, cursor: "pointer", boxShadow: pulseView === v ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>
+                        {v === "sentiment" ? "Mood" : "Study Zones"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-                  {[{ area: "Library", score: 81, mood: "😊" }, { area: "Mlair", score: 44, mood: "😤" }, { area: "PRT", score: 76, mood: "😊" }, { area: "Rec", score: 58, mood: "😐" }].map((area, i) => (
-                    <motion.div key={area.area} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
-                      style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: 12, borderRadius: 16, background: "#f8f9fc" }}>
-                      <span style={{ fontSize: 24, marginBottom: 4 }}>{area.mood}</span>
-                      <p style={{ fontSize: 17, fontWeight: 800, color: "#1e2a3a" }}>{area.score}</p>
-                      <p style={{ fontSize: 11, color: "#9ba3b5", textAlign: "center" }}>{area.area}</p>
-                    </motion.div>
-                  ))}
-                </div>
+                {pulseView === "sentiment" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                    {[{ area: "Library", score: 81, mood: "😊" }, { area: "Mlair", score: 44, mood: "😤" }, { area: "PRT", score: 76, mood: "😊" }, { area: "Rec", score: 58, mood: "😐" }].map((area, i) => (
+                      <motion.div key={area.area} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
+                        style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: 12, borderRadius: 16, background: "#f8f9fc" }}>
+                        <span style={{ fontSize: 24, marginBottom: 4 }}>{area.mood}</span>
+                        <p style={{ fontSize: 17, fontWeight: 800, color: "#1e2a3a" }}>{area.score}</p>
+                        <p style={{ fontSize: 11, color: "#9ba3b5", textAlign: "center" }}>{area.area}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {STUDY_ZONES.map((zone, i) => (
+                      <motion.div key={zone.name} initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 12, background: "#f8f9fc" }}>
+                        <div><p style={{ fontSize: 13, fontWeight: 600, color: "#1e2a3a" }}>{zone.name}</p><p style={{ fontSize: 11, color: "#6b7280" }}>{zone.noise} · {zone.status}</p></div>
+                        <div style={{ textAlign: "right" }}><p style={{ fontSize: 14, fontWeight: 700, color: zone.occupancy > 80 ? "#d43b3b" : "#2d9e6b" }}>{zone.occupancy}%</p><p style={{ fontSize: 10, color: "#9ba3b5" }}>full</p></div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
               </Card>
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
@@ -675,9 +975,9 @@ function AppDemo({ onBackToLanding }) {
                             </div>
                             <p style={{ fontSize: 14, color: "#374151", lineHeight: 1.5 }}>{post.text}</p>
                             <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
-                              <button onClick={() => setLikedPosts(p => ({ ...p, [post.id]: !p[post.id] }))}
+                              <button onClick={() => setLikedPosts((p: Record<number, boolean>) => ({ ...p, [post.id]: !p[post.id] }))}
                                 style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: likedPosts[post.id] ? "#d43b6f" : "#9ba3b5", fontFamily: "inherit" }}>
-                                <Heart size={14} fill={likedPosts[post.id] ? "#d43b6f" : "none"} />
+                                <Heart size={14} fill={likedPosts[post.id as keyof typeof likedPosts] ? "#d43b6f" : "none"} />
                                 <span style={{ fontSize: 12, fontWeight: 600 }}>{post.upvotes + (likedPosts[post.id] ? 1 : 0)}</span>
                               </button>
                               <button style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#9ba3b5", fontFamily: "inherit" }}>
@@ -721,8 +1021,8 @@ function AppDemo({ onBackToLanding }) {
                     <p style={{ fontSize: 11, fontWeight: 700, color: "#9ba3b5", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>{section.group}</p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {section.items.map((app, i) => (
-                        <motion.div key={app.label} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: si * 0.1 + i * 0.05 }} whileHover={{ x: 3 }}
-                          style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, borderRadius: 18, background: "#f8f9fc", cursor: "pointer" }}>
+                        <motion.button key={app.label} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: si * 0.1 + i * 0.05 }} whileHover={{ x: 3 }}
+                          style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, borderRadius: 18, background: "#f8f9fc", cursor: "pointer", border: "none", width: "100%", textAlign: "left", fontFamily: "inherit" }}>
                           <div style={{ width: 40, height: 40, borderRadius: 14, background: app.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             <app.icon size={18} style={{ color: app.color }} />
                           </div>
@@ -732,7 +1032,7 @@ function AppDemo({ onBackToLanding }) {
                           </div>
                           <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 10, background: app.bg, color: app.color }}>{app.status}</span>
                           <ChevronRight size={14} style={{ color: "#d0d5de" }} />
-                        </motion.div>
+                        </motion.button>
                       ))}
                     </div>
                   </div>
@@ -759,7 +1059,7 @@ function AppDemo({ onBackToLanding }) {
 }
 
 // ─── LANDING PAGE ─────────────────────────────────────────────────────────────
-function LandingPage({ onOpenPresentation, onEnterApp }) {
+function LandingPage({ onOpenPresentation, onEnterApp }: { onOpenPresentation: () => void; onEnterApp: () => void }) {
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", background: "#fff", minHeight: "100vh" }}>
 
@@ -784,7 +1084,7 @@ function LandingPage({ onOpenPresentation, onEnterApp }) {
       </div>
 
       {/* Hero */}
-      <div style={{ background: "linear-gradient(160deg, #001833 0%, #002855 50%, #1a4a8a 100%)", padding: "80px 24px 100px", textAlign: "center", position: "relative", overflow: "hidden" }}>
+      <div style={{ background: "radial-gradient(circle at top center, #1a4a8a 0%, #002855 60%, #001122 100%)", padding: "80px 24px 100px", textAlign: "center", position: "relative", overflow: "hidden" }}>
         {/* Soft glow */}
         <div style={{ position: "absolute", top: "20%", left: "50%", transform: "translateX(-50%)", width: 600, height: 300, borderRadius: "50%", background: "radial-gradient(ellipse, rgba(234,170,0,0.12) 0%, transparent 70%)", pointerEvents: "none" }} />
 
